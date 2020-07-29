@@ -12,6 +12,7 @@ from pymc4.distributions.distribution import (
     UnitContinuousDistribution,
     BoundedContinuousDistribution,
 )
+from pymc4.distributions import transforms
 from .half_student_t import HalfStudentT as TFPHalfStudentT
 
 
@@ -21,6 +22,7 @@ __all__ = [
     "Chi2",
     "Exponential",
     "Gamma",
+    "GeneralizedNormal",
     "Gumbel",
     "HalfCauchy",
     "HalfNormal",
@@ -31,6 +33,7 @@ __all__ = [
     "LogNormal",
     "Logistic",
     "LogitNormal",
+    "Moyal",
     "Normal",
     "Pareto",
     "StudentT",
@@ -67,7 +70,7 @@ class Normal(ContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(-5, 5, 1000)
         locs = [0., 0., 0., -2.]
         scales = [0.4, 1., 2., 0.4]
@@ -95,19 +98,80 @@ class Normal(ContinuousDistribution):
 
     Examples
     --------
-    .. code-block:: python
-        @pm.model
-        def model():
-            x = pm.Normal('x', loc=0, scale=10)
+    >>> import pymc4 as pm
+    >>> @pm.model
+    ... def model():
+    ...     x = yield pm.Normal('x', loc=0, scale=10)
     """
 
     def __init__(self, name, loc, scale, **kwargs):
         super().__init__(name, loc=loc, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         loc, scale = conditions["loc"], conditions["scale"]
-        return tfd.Normal(loc=loc, scale=scale)
+        return tfd.Normal(loc=loc, scale=scale, **kwargs)
+
+
+class GeneralizedNormal(ContinuousDistribution):
+    r"""Univariate generalized normal random variable.
+
+    The pdf of this distribution is
+
+    .. math::
+
+       f(x \mid \mu, \alpha, \beta) = 
+           \frac{\beta}{2 \Gamma(1/\beta)}
+           \exp(-(|x - \mu| /\alpha)^\beta)
+
+    .. plot::
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import scipy.stats as st
+        plt.style.use('arviz-darkgrid')
+        x = np.linspace(-4, 4, 1000)
+        shapes = [0.4, 1., 2., 8.]
+        for shape in shapes:
+            pdf = st.gennorm.pdf(x, shape)
+            plt.plot(x, pdf, label=r'$\mu$ = 0, $\alpha$ = 1, $\beta$ = {}'.format(shape))
+        plt.xlabel('x', fontsize=12)
+        plt.ylabel('f(x)', fontsize=12)
+        plt.legend(loc=1)
+        plt.show()
+
+    ========  ==========================================
+    Support   :math:`x \in \mathbb{R}`
+    Mean      :math:`\mu`
+    Variance  :math:`\dfrac{\alpha^2\Gamma(3/\beta)}{\Gamma(1/\beta)}`
+    ========  ==========================================
+
+    Parameters
+    ----------
+    loc : float
+        Location parameter. For the generalized normal distribution, this is the mean.
+    scale : float
+        Scale parameter.
+    power: float
+        Power parameter. When power is greater than 2, tails are heavier than normal,
+        when power is less than 2, tails are lighter than normal and when power is
+        equal to 2, the distribution becomes normal.
+
+    Examples
+    --------
+    >>> import pymc4 as pm
+    >>> @pm.model
+    ... def model():
+    ...     x = yield pm.GeneralizedNormal('x', loc=0, scale=10, power=4)
+    """
+
+    def __init__(self, name, loc, scale, power, **kwargs):
+        super().__init__(name, loc=loc, scale=scale, power=power, **kwargs)
+
+    @staticmethod
+    def _init_distribution(conditions, **kwargs):
+        loc, scale, power = conditions["loc"], conditions["scale"], conditions["power"]
+        return tfd.GeneralizedNormal(loc=loc, scale=scale, power=power, **kwargs)
 
 
 class HalfNormal(PositiveContinuousDistribution):
@@ -137,7 +201,7 @@ class HalfNormal(PositiveContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 5, 200)
         for scale in [0.4, 1., 2.]:
             pdf = st.halfnorm.pdf(x, scale=scale)
@@ -160,20 +224,19 @@ class HalfNormal(PositiveContinuousDistribution):
 
     Examples
     --------
-    .. code-block:: python
-
-        @pm.model
-        def model():
-            x = pm.HalfNormal('x', scale=10)
+    >>> import pymc4 as pm
+    >>> @pm.model
+    ... def model():
+    ...     x = yield pm.HalfNormal('x', scale=10)
     """
 
     def __init__(self, name, scale, **kwargs):
         super().__init__(name, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         scale = conditions["scale"]
-        return tfd.HalfNormal(scale=scale)
+        return tfd.HalfNormal(scale=scale, **kwargs)
 
 
 class HalfStudentT(PositiveContinuousDistribution):
@@ -193,7 +256,7 @@ class HalfStudentT(PositiveContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 5, 200)
         scales = [1., 1., 2., 1.]
         nus = [.5, 1., 1., 30.]
@@ -219,11 +282,10 @@ class HalfStudentT(PositiveContinuousDistribution):
 
     Examples
     --------
-    .. code-block:: python
-
-        @pm.model
-        def model():
-            x = pm.HalfStudentT('x', scale=10, df=10)
+    >>> import pymc4 as pm
+    >>> @pm.model
+    ... def model():
+    ...     x = yield pm.HalfStudentT('x', scale=10, df=10)
 
     In PyMC3, HalfStudentT's location was always zero. However, in a future PR, this can be changed.
     """
@@ -232,10 +294,10 @@ class HalfStudentT(PositiveContinuousDistribution):
         super().__init__(name, df=df, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         scale = conditions["scale"]
         df = conditions["df"]
-        return TFPHalfStudentT(df=df, loc=0, scale=scale)
+        return TFPHalfStudentT(df=df, loc=0, scale=scale, **kwargs)
 
 
 class Beta(UnitContinuousDistribution):
@@ -253,7 +315,7 @@ class Beta(UnitContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 1, 200)
         alphas = [.5, 5., 1., 2., 2.]
         betas = [.5, 1., 3., 2., 5.]
@@ -291,9 +353,9 @@ class Beta(UnitContinuousDistribution):
         )
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         concentration0, concentration1 = conditions["concentration0"], conditions["concentration1"]
-        return tfd.Beta(concentration0=concentration0, concentration1=concentration1)
+        return tfd.Beta(concentration0=concentration0, concentration1=concentration1, **kwargs)
 
 
 class Cauchy(ContinuousDistribution):
@@ -313,7 +375,7 @@ class Cauchy(ContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(-5, 5, 500)
         alphas = [0., 0., 0., -2.]
         betas = [.5, 1., 2., 1.]
@@ -344,9 +406,9 @@ class Cauchy(ContinuousDistribution):
         super().__init__(name, loc=loc, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         loc, scale = conditions["loc"], conditions["scale"]
-        return tfd.Cauchy(loc=loc, scale=scale)
+        return tfd.Cauchy(loc=loc, scale=scale, **kwargs)
 
 
 class Chi2(PositiveContinuousDistribution):
@@ -363,7 +425,7 @@ class Chi2(PositiveContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 15, 200)
         for df in [1, 2, 3, 6, 9]:
             pdf = st.chi2.pdf(x, df)
@@ -390,9 +452,9 @@ class Chi2(PositiveContinuousDistribution):
         super().__init__(name, df=df, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         df = conditions["df"]
-        return tfd.Chi2(df=df)
+        return tfd.Chi2(df=df, **kwargs)
 
 
 class Exponential(PositiveContinuousDistribution):
@@ -409,7 +471,7 @@ class Exponential(PositiveContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 3, 100)
         for lam in [0.5, 1., 2.]:
             pdf = st.expon.pdf(x, scale=1.0/lam)
@@ -435,9 +497,9 @@ class Exponential(PositiveContinuousDistribution):
         super().__init__(name, rate=rate, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         rate = conditions["rate"]
-        return tfd.Exponential(rate=rate)
+        return tfd.Exponential(rate=rate, **kwargs)
 
 
 class Gamma(PositiveContinuousDistribution):
@@ -458,7 +520,7 @@ class Gamma(PositiveContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 20, 200)
         alphas = [1., 2., 3., 7.5]
         betas = [.5, .5, 1., 1.]
@@ -488,9 +550,9 @@ class Gamma(PositiveContinuousDistribution):
         super().__init__(name, concentration=concentration, rate=rate, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         concentration, rate = conditions["concentration"], conditions["rate"]
-        return tfd.Gamma(concentration=concentration, rate=rate)
+        return tfd.Gamma(concentration=concentration, rate=rate, **kwargs)
 
 
 class Gumbel(ContinuousDistribution):
@@ -513,7 +575,7 @@ class Gumbel(ContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(-10, 20, 200)
         locs = [0., 4., -1.]
         betas = [2., 2., 4.]
@@ -544,9 +606,13 @@ class Gumbel(ContinuousDistribution):
         super().__init__(name, loc=loc, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         loc, scale = conditions["loc"], conditions["scale"]
-        return tfd.Gumbel(loc=loc, scale=scale)
+        return tfd.Gumbel(loc=loc, scale=scale, **kwargs)
+
+    @property
+    def validate_args(self):
+        return self._distribution.bijector.validate_args
 
 
 class HalfCauchy(PositiveContinuousDistribution):
@@ -563,7 +629,7 @@ class HalfCauchy(PositiveContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 5, 200)
         for b in [0.5, 1.0, 2.0]:
             pdf = st.cauchy.pdf(x, scale=b)
@@ -584,19 +650,15 @@ class HalfCauchy(PositiveContinuousDistribution):
     ----------
     scale : float
         Scale parameter (scale > 0).
-
-    Developer Notes
-    ----------------
-    In PyMC3, HalfCauchy's location was always zero. However, in a future PR, this can be changed.
     """
 
     def __init__(self, name, scale, **kwargs):
         super().__init__(name, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         scale = conditions["scale"]
-        return tfd.HalfCauchy(loc=0, scale=scale)
+        return tfd.HalfCauchy(loc=0, scale=scale, **kwargs)
 
 
 class InverseGamma(PositiveContinuousDistribution):
@@ -615,7 +677,7 @@ class InverseGamma(PositiveContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 3, 500)
         alphas = [1., 2., 3., 3.]
         betas = [1., 1., 1., .5]
@@ -646,9 +708,9 @@ class InverseGamma(PositiveContinuousDistribution):
         super().__init__(name, concentration=concentration, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         concentration, scale = conditions["concentration"], conditions["scale"]
-        return tfd.InverseGamma(concentration=concentration, scale=scale)
+        return tfd.InverseGamma(concentration=concentration, scale=scale, **kwargs)
 
 
 class InverseGaussian(PositiveContinuousDistribution):
@@ -664,9 +726,9 @@ class InverseGaussian(PositiveContinuousDistribution):
         super().__init__(name, loc=loc, concentration=concentration, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         loc, concentration = conditions["loc"], conditions["concentration"]
-        return tfd.InverseGaussian(loc=loc, concentration=concentration)
+        return tfd.InverseGaussian(loc=loc, concentration=concentration, **kwargs)
 
 
 class Kumaraswamy(UnitContinuousDistribution):
@@ -683,7 +745,7 @@ class Kumaraswamy(UnitContinuousDistribution):
 
         import matplotlib.pyplot as plt
         import numpy as np
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 1, 200)
         a_s = [.5, 5., 1., 2., 2.]
         b_s = [.5, 1., 3., 2., 5.]
@@ -716,9 +778,15 @@ class Kumaraswamy(UnitContinuousDistribution):
         )
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         concentration0, concentration1 = conditions["concentration0"], conditions["concentration1"]
-        return tfd.Kumaraswamy(concentration0=concentration0, concentration1=concentration1)
+        return tfd.Kumaraswamy(
+            concentration0=concentration0, concentration1=concentration1, **kwargs
+        )
+
+    @property
+    def validate_args(self):
+        return self._distribution.bijector.validate_args
 
 
 class Laplace(ContinuousDistribution):
@@ -736,7 +804,7 @@ class Laplace(ContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(-10, 10, 1000)
         locs = [0., 0., 0., -5.]
         bs = [1., 2., 4., 4.]
@@ -766,9 +834,9 @@ class Laplace(ContinuousDistribution):
         super().__init__(name, loc=loc, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         loc, scale = conditions["loc"], conditions["scale"]
-        return tfd.Laplace(loc=loc, scale=scale)
+        return tfd.Laplace(loc=loc, scale=scale, **kwargs)
 
 
 class Logistic(ContinuousDistribution):
@@ -786,7 +854,7 @@ class Logistic(ContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(-5, 5, 200)
         locs = [0., 0., 0., -2.]
         scales = [.4, 1., 2., .4]
@@ -817,9 +885,9 @@ class Logistic(ContinuousDistribution):
         super().__init__(name, loc=loc, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         loc, scale = conditions["loc"], conditions["scale"]
-        return tfd.Logistic(loc=loc, scale=scale)
+        return tfd.Logistic(loc=loc, scale=scale, **kwargs)
 
 
 class LogitNormal(UnitContinuousDistribution):
@@ -844,9 +912,9 @@ class LogitNormal(UnitContinuousDistribution):
         super().__init__(name, loc=loc, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         loc, scale = conditions["loc"], conditions["scale"]
-        return tfd.LogitNormal(loc=loc, scale=scale)
+        return tfd.LogitNormal(loc=loc, scale=scale, **kwargs)
 
 
 class LogNormal(PositiveContinuousDistribution):
@@ -870,7 +938,7 @@ class LogNormal(PositiveContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 3, 100)
         locs = [0., 0., 0.]
         scales = [.25, .5, 1.]
@@ -897,19 +965,81 @@ class LogNormal(PositiveContinuousDistribution):
 
     Example
     -------
-    .. code-block:: python
-        @pm.model
-        def model():
-            x = pm.Lognormal('x', loc=2, scale=30)
+    >>> import pymc4 as pm
+    >>> @pm.model
+    ... def model():
+    ...     x = yield pm.Lognormal('x', loc=2, scale=30)
     """
 
     def __init__(self, name, loc, scale, **kwargs):
         super().__init__(name, loc=loc, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         loc, scale = conditions["loc"], conditions["scale"]
-        return tfd.LogNormal(loc=loc, scale=scale)
+        return tfd.LogNormal(loc=loc, scale=scale, **kwargs)
+
+
+class Moyal(ContinuousDistribution):
+    r"""Continuous Moyal random variable.
+
+    The pdf of this distribution is
+
+    .. math::
+
+        f(x \mid \mu, \sigma) = 
+           \frac{1}{\sqrt{2\pi}\sigma}
+           \exp\left(-\frac{1}{2}\left[\frac{x-\mu}{\sigma}+\exp\left(-\frac{x-\mu}{\sigma}\right)\right]\right)
+
+    .. plot::
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import scipy.stats as st
+        plt.style.use('arviz-darkgrid')
+        x = np.linspace(-5, 10, 1000)
+        locs = [0., 0., 0., -2.]
+        scales = [0.5, 0.6, 1., 1.]
+        for loc, scale in zip(locs, scales):
+            pdf = st.moyal.pdf(x, loc, scale)
+            plt.plot(x, pdf, label=r'$\mu$ = {}, $\sigma$ = {}'.format(loc, scale))
+        plt.xlabel('x', fontsize=12)
+        plt.ylabel('f(x)', fontsize=12)
+        plt.legend(loc=1)
+        plt.show()
+
+    ========  ==========================================
+    Support   :math:`x \in \mathbb{R}`
+    Mean      :math:`\mu+\sigma(\gamma+ln(2))` where \gamma is the Euler-Mascheroni constant
+    Variance  :math:`\dfrac{\pi^2\sigma^2}{2}`
+    ========  ==========================================
+
+    Parameters
+    ----------
+    loc : float
+        Location parameter.
+    scale : float
+        Scale parameter.
+
+    Examples
+    --------
+    >>> import pymc4 as pm
+    >>> @pm.model
+    ... def model():
+    ...     x = yield pm.Moyal('x', loc=0, scale=10)
+    """
+
+    def __init__(self, name, loc, scale, **kwargs):
+        super().__init__(name, loc=loc, scale=scale, **kwargs)
+
+    @staticmethod
+    def _init_distribution(conditions, **kwargs):
+        loc, scale = conditions["loc"], conditions["scale"]
+        return tfd.Moyal(loc=loc, scale=scale, **kwargs)
+
+    @property
+    def validate_args(self):
+        return self._distribution.bijector.validate_args
 
 
 class Pareto(BoundedContinuousDistribution):
@@ -929,7 +1059,7 @@ class Pareto(BoundedContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 4, 1000)
         alphas = [1., 2., 5., 5.]
         ms = [1., 1., 1., 2.]
@@ -956,13 +1086,19 @@ class Pareto(BoundedContinuousDistribution):
         Scale parameter (scale > 0).
     """
 
+    def _init_transform(self, transform):
+        if transform is None:
+            return transforms.LowerBound(self.lower_limit())
+        else:
+            return transform
+
     def __init__(self, name, concentration, scale, **kwargs):
         super().__init__(name, concentration=concentration, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         concentration, scale = conditions["concentration"], conditions["scale"]
-        return tfd.Pareto(concentration=concentration, scale=scale)
+        return tfd.Pareto(concentration=concentration, scale=scale, **kwargs)
 
     def upper_limit(self):
         return float("inf")
@@ -1000,7 +1136,7 @@ class StudentT(ContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(-8, 8, 200)
         locs = [0., 0., -2., -2.]
         scales = [1., 1., 1., 2.]
@@ -1029,20 +1165,19 @@ class StudentT(ContinuousDistribution):
 
     Examples
     --------
-    .. code-block:: python
-
-        @pm.model
-        def model():
-            x = pm.StudentT('x', df=15, loc=0, scale=10)
+    >>> import pymc4 as pm
+    >>> @pm.model
+    ... def model():
+    ...     x = yield pm.StudentT('x', df=15, loc=0, scale=10)
     """
 
     def __init__(self, name, loc, scale, df, **kwargs):
         super().__init__(name, loc=loc, scale=scale, df=df, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         df, loc, scale = conditions["df"], conditions["loc"], conditions["scale"]
-        return tfd.StudentT(df=df, loc=loc, scale=scale)
+        return tfd.StudentT(df=df, loc=loc, scale=scale, **kwargs)
 
 
 class Triangular(BoundedContinuousDistribution):
@@ -1065,7 +1200,7 @@ class Triangular(BoundedContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(-2, 10, 500)
         lowers = [0., -1, 2]
         cs = [2., 0., 6.5]
@@ -1102,9 +1237,9 @@ class Triangular(BoundedContinuousDistribution):
         super().__init__(name, low=low, peak=peak, high=high, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         low, high, peak = conditions["low"], conditions["high"], conditions["peak"]
-        return tfd.Triangular(low=low, high=high, peak=peak)
+        return tfd.Triangular(low=low, high=high, peak=peak, **kwargs)
 
     def lower_limit(self):
         return self.conditions["low"]
@@ -1126,7 +1261,7 @@ class Uniform(BoundedContinuousDistribution):
 
         import matplotlib.pyplot as plt
         import numpy as np
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(-3, 3, 500)
         ls = [0., -2]
         us = [2., 1]
@@ -1158,9 +1293,9 @@ class Uniform(BoundedContinuousDistribution):
         super().__init__(name, low=low, high=high, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         low, high = conditions["low"], conditions["high"]
-        return tfd.Uniform(low=low, high=high)
+        return tfd.Uniform(low=low, high=high, **kwargs)
 
     # FIXME should we rename this functions as well?
     def lower_limit(self):
@@ -1171,7 +1306,9 @@ class Uniform(BoundedContinuousDistribution):
 
 
 class Flat(ContinuousDistribution):
-    r"""A uniform distribution with support :math:`(-\inf, \inf)`.
+    r"""
+    A uniform distribution with support :math:`(-\inf, \inf)`.
+
     Used as a uninformative log-likelihood that returns
     zeros regardless of the passed values.
     """
@@ -1180,8 +1317,8 @@ class Flat(ContinuousDistribution):
         super().__init__(name, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
-        return tfd.Uniform(low=-np.inf, high=np.inf)
+    def _init_distribution(conditions, **kwargs):
+        return tfd.Uniform(low=-np.inf, high=np.inf, **kwargs)
 
     def log_prob(self, value):
         # convert the value to tensor
@@ -1210,9 +1347,7 @@ class Flat(ContinuousDistribution):
         return tf.reduce_sum(expected, axis=range(-len(self._distribution.event_shape), 0))
 
     def sample(self, shape=(), seed=None):
-        """Raises ValueError as it is not possible to sample
-        from flat distribution.
-        """
+        """Raise a ValueError as it is not possible to sample from flat distribution."""
         raise TypeError("cannot sample from a flat distribution")
 
 
@@ -1223,8 +1358,8 @@ class HalfFlat(PositiveContinuousDistribution):
         super().__init__(name, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
-        return tfd.Uniform(low=0.0, high=np.inf)
+    def _init_distribution(conditions, **kwargs):
+        return tfd.Uniform(low=0.0, high=np.inf, **kwargs)
 
     def log_prob(self, value):
         # convert the value to tensor
@@ -1255,9 +1390,7 @@ class HalfFlat(PositiveContinuousDistribution):
         return tf.reduce_sum(expected, axis=range(-len(self.event_shape), 0))
 
     def sample(self, shape=(), seed=None):
-        """Raises ValueError as it is not possible to sample
-        from half flat distribution.
-        """
+        """Raise a ValueError as it is not possible to sample from half flat distribution."""
         raise TypeError("cannot sample from a half flat distribution")
 
 
@@ -1278,7 +1411,7 @@ class VonMises(BoundedContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(-np.pi, np.pi, 200)
         locs = [0., 0., 0.,  -2.5]
         concentrations = [.01, 0.5,  4., 2.]
@@ -1308,9 +1441,9 @@ class VonMises(BoundedContinuousDistribution):
         super().__init__(name, loc=loc, concentration=concentration, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         loc, concentration = conditions["loc"], conditions["concentration"]
-        return tfd.VonMises(loc=loc, concentration=concentration)
+        return tfd.VonMises(loc=loc, concentration=concentration, **kwargs)
 
     def lower_limit(self):
         return -math.pi
@@ -1335,7 +1468,7 @@ class Weibull(PositiveContinuousDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.linspace(0, 3, 200)
         concentrations = [.5, 1., 1.5, 5., 5.]
         scales = [1., 1., 1., 1.,  2]
@@ -1360,21 +1493,13 @@ class Weibull(PositiveContinuousDistribution):
         Shape parameter (concentration > 0).
     scale : float|tensor
         Scale parameter (scale > 0).
-    
-    Developer Notes
-    ---------------
-    The Weibull distribution is implemented as a standard uniform distribution transformed by the
-    Inverse of the WeibullCDF bijector. The shape to broadcast the low and high parameters for the
-    Uniform distribution are obtained using 
-    tensorflow_probability.python.internal.distribution_util.prefer_static_broadcast_shape()
     """
 
     def __init__(self, name, concentration, scale, **kwargs):
         super().__init__(name, concentration=concentration, scale=scale, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
-
+    def _init_distribution(conditions, **kwargs):
         concentration, scale = conditions["concentration"], conditions["scale"]
 
         scale_tensor, concentration_tensor = (
@@ -1386,7 +1511,10 @@ class Weibull(PositiveContinuousDistribution):
         )
 
         return tfd.TransformedDistribution(
-            distribution=tfd.Uniform(low=tf.zeros(broadcast_shape), high=tf.ones(broadcast_shape)),
+            distribution=tfd.Uniform(
+                low=tf.zeros(broadcast_shape), high=tf.ones(broadcast_shape), **kwargs
+            ),
             bijector=bij.Invert(bij.WeibullCDF(scale=scale, concentration=concentration)),
+            validate_args=kwargs.get("validate_args", False),
             name="Weibull",
         )

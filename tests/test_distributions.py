@@ -1,7 +1,7 @@
 """
 Tests for PyMC4 random variables
 """
-from collections import defaultdict
+from collections import defaultdict, ChainMap
 import pytest
 import numpy as np
 import tensorflow as tf
@@ -116,6 +116,14 @@ _distribution_conditions = {
             "rate": np.array([1.0, 2.0, 2.0], dtype="float32"),
         },
     },
+    "GeneralizedNormal": {
+        "scalar_parameters": {"loc": 0.0, "scale": 1.0, "power": 4.0},
+        "multidim_parameters": {
+            "loc": np.array([0.25, 0.5], dtype="float32"),
+            "scale": np.array([5.0, 10.0], dtype="float32"),
+            "power": np.array([1.0, 4.0], dtype="float32"),
+        },
+    },
     "Geometric": {
         "scalar_parameters": {"probs": 0.5, "sample": 10.0},
         "multidim_parameters": {
@@ -209,6 +217,13 @@ _distribution_conditions = {
         "multidim_parameters": {
             "loc": np.array([0.0, 0.0], dtype="float32"),
             "scale": np.array([3.0, 3.0], dtype="float32"),
+        },
+    },
+    "Moyal": {
+        "scalar_parameters": {"loc": 0.0, "scale": 1.0},
+        "multidim_parameters": {
+            "loc": np.array([0.0, 0.0], dtype="float32"),
+            "scale": np.array([1.0, 1.0], dtype="float32"),
         },
     },
     "Multinomial": {
@@ -334,7 +349,7 @@ _distribution_conditions = {
             "sample": np.array([0.0, 1.0], dtype="float32"),
         },
         "multidim_parameters": {
-            "mean_direction": np.array([[1.0, 1.0], [0.0, 1.0]], dtype="float32"),
+            "mean_direction": np.array([[1.0, 0.0], [0.0, 1.0]], dtype="float32"),
             "concentration": np.array([1.0, 1.0], dtype="float32"),
             "sample": np.array([[1.0, 1.0], [0.0, 1.0]], dtype="float32"),
         },
@@ -392,6 +407,39 @@ _distribution_conditions = {
 }
 
 
+unsupported_dtype_distributions = [
+    "Poisson",
+    "NegativeBinomial",
+    "Multinomial",
+    "Geometric",
+    "DiscreteUniform",
+    "Categorical",
+    "BetaBinomial",
+    "Binomial",
+]
+
+_distribution_extra_parameters = {}
+for distribution in _distribution_conditions:
+    extra_parameters = {
+        "dtype": None,
+        "validate_args": {"validate_args": True},
+        "allow_nan_stats": {"allow_nan_stats": True},
+    }
+    if (
+        not issubclass(getattr(pm, distribution, None), pm.ContinuousDistribution)
+        and distribution not in unsupported_dtype_distributions
+    ):
+        extra_parameters["dtype"] = {"dtype": "int32"}
+    if distribution == "AR":
+        # time series cannot be configured at the moment
+        extra_parameters = {
+            "dtype": None,
+            "validate_args": None,
+            "allow_nan_stats": None,
+        }
+    _distribution_extra_parameters[distribution] = extra_parameters
+
+
 @pytest.fixture(scope="function", params=list(_distribution_conditions), ids=str)
 def distribution(request):
     return request.param
@@ -409,6 +457,17 @@ def distribution_conditions(distribution, request):
     log_prob_test_sample = conditions.pop("sample", 0.1)
     expected_log_prob = conditions.pop("expected", None)
     return distribution, conditions, log_prob_test_sample, expected_log_prob
+
+
+@pytest.fixture(scope="function", params=["dtype", "validate_args", "allow_nan_stats"], ids=str)
+def distribution_extra_parameters(distribution, request):
+    conditions = _distribution_conditions[distribution]["scalar_parameters"]
+    return (
+        distribution,
+        request.param,
+        conditions,
+        _distribution_extra_parameters[distribution][request.param],
+    )
 
 
 @pytest.fixture(scope="function", params=list(_check_broadcast), ids=str)
@@ -459,13 +518,6 @@ def test_rvs_test_point_are_valid(tf_seed, distribution_conditions):
     assert not (np.any(np.isinf(logp)) or np.any(np.isnan(logp)))
 
 
-def test_multivariate_normal_cholesky(tf_seed):
-    mean = np.zeros(2)
-    cov = np.array([[-1.0, 0.0], [0.0, -1.0]])
-    with pytest.raises(ValueError, match=r"Cholesky decomposition failed"):
-        pm.MvNormal("x", loc=mean, covariance_matrix=cov)
-
-
 def test_flat_halfflat_broadcast(tf_seed, check_broadcast):
     """Test the error messages returned by Flat and HalfFlat
     distributions for inconsistent sample shapes"""
@@ -473,3 +525,17 @@ def test_flat_halfflat_broadcast(tf_seed, check_broadcast):
     for sample in samples:
         with pytest.raises(ValueError, match=r"not consistent"):
             dist.log_prob(sample)
+
+
+def test_extra_parameters(tf_seed, distribution_extra_parameters):
+    distribution_name, arg_name, conditions, extra_parameters = distribution_extra_parameters
+    if extra_parameters is None:
+        pytest.skip(
+            f"Distribution '{distribution_name}' does not support configurable '{arg_name}'"
+        )
+    dist_class = getattr(pm, distribution_name)
+    dist = dist_class(name=distribution_name, **ChainMap(conditions, extra_parameters))
+    assert getattr(dist, arg_name) == extra_parameters[arg_name]
+    if distribution_name not in ["Flat", "HalfFlat"]:
+        # Test that a sample can be drawn using the alternative extra parameters values
+        dist.sample()

@@ -5,6 +5,7 @@ from pymc4.distributions.distribution import (
     PositiveDiscreteDistribution,
     BoundedDiscreteDistribution,
 )
+from pymc4.distributions import transforms
 
 __all__ = [
     "Bernoulli",
@@ -35,7 +36,7 @@ class Bernoulli(BoundedDiscreteDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = [0, 1]
         for prob in [0, 0.5, 0.8]:
             pmf = st.bernoulli.pmf(x, prob)
@@ -62,15 +63,15 @@ class Bernoulli(BoundedDiscreteDistribution):
         super().__init__(name, probs=probs, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         probs = conditions["probs"]
-        return tfd.Bernoulli(probs=probs)
+        return tfd.Bernoulli(probs=probs, **kwargs)
 
     def lower_limit(self):
-        return 0
+        return 0.0
 
     def upper_limit(self):
-        return 1
+        return 1.0
 
 
 class Binomial(BoundedDiscreteDistribution):
@@ -89,7 +90,7 @@ class Binomial(BoundedDiscreteDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.arange(0, 22)
         total_counts = [10, 17]
         probs = [0.5, 0.7]
@@ -119,19 +120,19 @@ class Binomial(BoundedDiscreteDistribution):
         super().__init__(name, total_count=total_count, probs=probs, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         total_count, probs = conditions["total_count"], conditions["probs"]
-        return tfd.Binomial(total_count=total_count, probs=probs)
+        return tfd.Binomial(total_count=total_count, probs=probs, **kwargs)
 
     def lower_limit(self):
-        return 0
+        return 0.0
 
     def upper_limit(self):
         return self.conditions["total_count"]
 
 
 class BetaBinomial(BoundedDiscreteDistribution):
-    r"""Bounded Discrete compound Beta-Binomial Random Variable
+    r"""Bounded Discrete compound Beta-Binomial Random Variable.
 
     The pmf of this distribution is
 
@@ -146,14 +147,14 @@ class BetaBinomial(BoundedDiscreteDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         n = 10
         x = np.arange(0, n)
         alphas = [1, 2]
         betas = [6, 2]
         for a, b in zip(alphas, betas):
             pmf = st.betabinom(n, a, b).pmf(x)
-            plt.plot(x, pmf, '-o', label='low = {}, high = {}'.format(low, high))
+            plt.plot(x, pmf, '-o', label='alpha = {}, beta = {}'.format(a, b))
         plt.xlabel('x', fontsize=12)
         plt.ylabel('f(x)', fontsize=12)
         plt.ylim(0, 0.4)
@@ -186,18 +187,21 @@ class BetaBinomial(BoundedDiscreteDistribution):
         )
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         total_count, concentration0, concentration1 = (
             conditions["total_count"],
             conditions["concentration0"],
             conditions["concentration1"],
         )
         return tfd.BetaBinomial(
-            total_count=total_count, concentration0=concentration0, concentration1=concentration1
+            total_count=total_count,
+            concentration0=concentration0,
+            concentration1=concentration1,
+            **kwargs,
         )
 
     def lower_limit(self):
-        return 0
+        return 0.0
 
     def upper_limit(self):
         return self.conditions["total_count"]
@@ -215,7 +219,7 @@ class DiscreteUniform(BoundedDiscreteDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         lows = [1, -2]
         highs = [6, 2]
         for low, high in zip(lows, highs):
@@ -246,10 +250,12 @@ class DiscreteUniform(BoundedDiscreteDistribution):
         super().__init__(name, low=low, high=high, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         low, high = conditions["low"], conditions["high"]
         outcomes = tf.range(low, high + 1)
-        return tfd.FiniteDiscrete(outcomes, probs=outcomes / (high - low))
+        return tfd.FiniteDiscrete(
+            outcomes, probs=tf.ones_like(outcomes) / (high + 1 - low), **kwargs
+        )
 
     def lower_limit(self):
         return self.conditions["low"]
@@ -270,7 +276,7 @@ class Categorical(BoundedDiscreteDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         probs = [[0.1, 0.6, 0.3], [0.3, 0.1, 0.1, 0.5]]
         for prob in probs:
             x = range(len(prob))
@@ -295,20 +301,21 @@ class Categorical(BoundedDiscreteDistribution):
         super().__init__(name, probs=probs, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         probs = tf.convert_to_tensor(conditions["probs"])
         outcomes = tf.range(probs.shape[-1])
-        return tfd.FiniteDiscrete(outcomes, probs=probs)
+        return tfd.FiniteDiscrete(outcomes, probs=probs, **kwargs)
 
     def lower_limit(self):
-        return 0
+        return 0.0
 
     def upper_limit(self):
-        return len(self.conditions["probs"])
+        return self.conditions["probs"].shape[-1]
 
 
 class Geometric(BoundedDiscreteDistribution):
-    r"""Geometric random variable.
+    r"""
+    Geometric random variable.
 
     The probability that the first success in a sequence of Bernoulli
     trials occurs on the x'th trial.
@@ -322,7 +329,7 @@ class Geometric(BoundedDiscreteDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.arange(1, 11)
         for prob in [0.1, 0.25, 0.75]:
             pmf = st.geom.pmf(x, prob)
@@ -343,26 +350,34 @@ class Geometric(BoundedDiscreteDistribution):
     probs : float
         Probability of success on an individual trial (0 < probs <= 1).
     """
+
     # Another example for a wrong type used on the tensorflow side
     _test_value = 2.0  # type: ignore
+
+    def _init_transform(self, transform):
+        if transform is None:
+            return transforms.LowerBound(self.lower_limit())
+        else:
+            return transform
 
     def __init__(self, name, probs, **kwargs):
         super().__init__(name, probs=probs, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         probs = conditions["probs"]
-        return tfd.Geometric(probs=probs)
+        return tfd.Geometric(probs=probs, **kwargs)
 
     def lower_limit(self):
-        return 1
+        return 1.0
 
     def upper_limit(self):
         return float("inf")
 
 
 class NegativeBinomial(PositiveDiscreteDistribution):
-    r"""Negative binomial random variable.
+    r"""
+    Negative binomial random variable.
 
     The negative binomial distribution describes a Poisson random variable
     whose rate parameter is gamma distributed.
@@ -384,7 +399,7 @@ class NegativeBinomial(PositiveDiscreteDistribution):
         import numpy as np
         import scipy.stats as st
         from scipy import special
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
 
         def NegBinom(a, m, x):
             pmf = special.binom(x + a - 1, x) * (a / (m + a))**a * (m / (m + a))**x
@@ -413,6 +428,7 @@ class NegativeBinomial(PositiveDiscreteDistribution):
     probs : float
         Probability of success on an individual trial (0 < probs <= 1).
     """
+
     # For some ridiculous reason, tfp needs negative binomial values to be floats...
     _test_value = 0.0  # type: ignore
 
@@ -420,13 +436,14 @@ class NegativeBinomial(PositiveDiscreteDistribution):
         super().__init__(name, total_count=total_count, probs=probs, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         total_count, probs = conditions["total_count"], conditions["probs"]
-        return tfd.NegativeBinomial(total_count=total_count, probs=probs)
+        return tfd.NegativeBinomial(total_count=total_count, probs=probs, **kwargs)
 
 
 class Poisson(PositiveDiscreteDistribution):
-    r"""Poisson random variable.
+    r"""
+    Poisson random variable.
 
     Often used to model the number of events occurring in a fixed period
     of time when the times at which events occur are independent.
@@ -439,7 +456,7 @@ class Poisson(PositiveDiscreteDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.arange(0, 15)
         for rate in [0.5, 3, 8]:
             pmf = st.poisson.pmf(x, rate)
@@ -467,6 +484,7 @@ class Poisson(PositiveDiscreteDistribution):
     The Poisson distribution can be derived as a limiting case of the
     binomial distribution.
     """
+
     # For some ridiculous reason, tfp needs poisson values to be floats...
     _test_value = 0.0  # type: ignore
 
@@ -474,9 +492,9 @@ class Poisson(PositiveDiscreteDistribution):
         super().__init__(name, rate=rate, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         rate = conditions["rate"]
-        return tfd.Poisson(rate=rate)
+        return tfd.Poisson(rate=rate, **kwargs)
 
 
 # TODO: Implement this
@@ -497,7 +515,7 @@ class Poisson(PositiveDiscreteDistribution):
 #         import matplotlib.pyplot as plt
 #         import numpy as np
 #         import scipy.stats as st
-#         plt.style.use('seaborn-darkgrid')
+#         plt.style.use('arviz-darkgrid')
 #         x = np.arange(0, 25)
 #         ns = [10, 20]
 #         ps = [0.5, 0.7]
@@ -567,7 +585,7 @@ class Poisson(PositiveDiscreteDistribution):
 #         import numpy as np
 #         import scipy.stats as st
 #         from scipy import special
-#         plt.style.use('seaborn-darkgrid')
+#         plt.style.use('arviz-darkgrid')
 #         def ZeroInfNegBinom(a, m, psi, x):
 #             pmf = special.binom(x + a - 1, x) * (a / (m + a))**a * (m / (m + a))**x
 #             pmf[0] = (1 - psi) + pmf[0]
@@ -630,7 +648,7 @@ class Poisson(PositiveDiscreteDistribution):
 #         import matplotlib.pyplot as plt
 #         import numpy as np
 #         import scipy.stats as st
-#         plt.style.use('seaborn-darkgrid')
+#         plt.style.use('arviz-darkgrid')
 #         x = np.arange(0, 22)
 #         psis = [0.7, 0.4]
 #         thetas = [8, 4]
@@ -682,7 +700,7 @@ class Zipf(PositiveDiscreteDistribution):
         import matplotlib.pyplot as plt
         import numpy as np
         import scipy.stats as st
-        plt.style.use('seaborn-darkgrid')
+        plt.style.use('arviz-darkgrid')
         x = np.arange(1, 8)
         for power in [1.1, 2., 5.]:
             pmf = st.zipf.pmf(x, power)
@@ -707,9 +725,9 @@ class Zipf(PositiveDiscreteDistribution):
         super().__init__(name, power=power, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         power = conditions["power"]
-        return tfd.Zipf(power=power)
+        return tfd.Zipf(power=power, **kwargs)
 
 
 class OrderedLogistic(BoundedDiscreteDistribution):
@@ -743,13 +761,13 @@ class OrderedLogistic(BoundedDiscreteDistribution):
         super().__init__(name, loc=loc, cutpoints=cutpoints, **kwargs)
 
     @staticmethod
-    def _init_distribution(conditions):
+    def _init_distribution(conditions, **kwargs):
         cutpoints = tf.convert_to_tensor(conditions["cutpoints"])
         loc = conditions["loc"]
-        return tfd.OrderedLogistic(cutpoints=cutpoints, loc=loc)
+        return tfd.OrderedLogistic(cutpoints=cutpoints, loc=loc, **kwargs)
 
     def lower_limit(self):
-        return 0
+        return 0.0
 
     def upper_limit(self):
-        return len(self._distribution.cutpoints)
+        return self.conditions["cutpoints"].shape[-1]
